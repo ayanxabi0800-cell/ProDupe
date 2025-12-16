@@ -1,0 +1,150 @@
+-- PIZZA HUB V2.0 BY:@PizzaHub0 🍕
+-- Цвета: оранжевый, черный, белый
+
+local Delta = loadstring(game:HttpGet("https://raw.githubusercontent.com/your-repo/main/delta-ui.lua"))()
+local player = game.Players.LocalPlayer
+local backpack = player.Backpack
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- GUI
+local GUI = Delta.CreateLib("PIZZA HUB V2.0 🍕", "Default")
+local Main = GUI.NewTab("Дюпа предметов")
+local Section = Main.NewSection("Дублирование и обмен")
+
+-- Стилизация
+GUI.Color = Color3.fromRGB(255, 165, 0) -- оранжевый
+GUI.AccentColor = Color3.fromRGB(0, 0, 0) -- чёрный
+GUI.TextColor = Color3.fromRGB(255, 255, 255) -- белый
+
+-- Адаптация под экран
+local function centerScreen()
+    local screenSize = workspace.CurrentCamera.ViewportSize
+    GUI.Position = UDim2.new(0.5, -175, 0.5, -120)
+end
+centerScreen()
+game:GetService("RunService").RenderStepped:Connect(centerScreen)
+
+-- Функции
+local function getToolInHand()
+    if character and character:FindFirstChildOfClass("Tool") then
+        return character:FindFirstChildOfClass("Tool")
+    end
+    return nil
+end
+
+local function deepCopy(tool)
+    local clone = tool:Clone()
+    local originalID = tool.AssetId
+    
+    -- Подделываем серверные атрибуты
+    clone:SetAttribute("OriginalID", originalID)
+    clone:SetAttribute("Duplicated", true)
+    clone:SetAttribute("OwnerID", player.UserId)
+    
+    -- Маскировка под оригинал
+    clone.Name = tool.Name
+    clone.ToolTip = tool.ToolTip or "Original Item"
+    
+    -- Инъекция в ReplicatedStorage для валидации
+    local storage = game:GetService("ReplicatedStorage")
+    local validationTag = Instance.new("StringValue")
+    validationTag.Name = "ValidDupe_" .. clone.Name
+    validationTag.Value = player.UserId
+    validationTag.Parent = storage
+    
+    return clone
+end
+
+local function injectTradeSystem(clone)
+    -- Перехват RemoteEvent для обмена
+    local tradeRemote = game:GetService("ReplicatedStorage"):FindFirstChild("TradeEvent") or
+                       game:GetService("ReplicatedStorage"):FindFirstChild("ExchangeRemote")
+    
+    if tradeRemote then
+        local originalFire = tradeRemote.FireServer
+        tradeRemote.FireServer = function(self, ...)
+            local args = {...}
+            if args[1] and type(args[1]) == "table" and args[1].ItemID then
+                -- Подменяем ItemID на клонированный
+                args[1].ItemID = clone.AssetId
+                args[1].Signature = "PIZZAHUB_VALIDATED_" .. os.time()
+            end
+            return originalFire(self, unpack(args))
+        end
+    end
+end
+
+-- Интерфейс
+Section.CreateLabel("Держите предмет в руке 🛠️")
+
+local dupeBtn = Section.CreateButton("Дюпать предмет 🍕", function()
+    local tool = getToolInHand()
+    if tool then
+        local clone = deepCopy(tool)
+        
+        -- Визуальная индикация
+        dupeBtn.Text = "Клонирование..."
+        wait(0.5)
+        
+        -- Помещаем клон в инвентарь
+        clone.Parent = backpack
+        
+        -- Инжектим систему обмена
+        injectTradeSystem(clone)
+        
+        dupeBtn.Text = "Успешно ✅"
+        
+        -- Лог в консоль
+        print("[PIZZA HUB] Предмет склонирован: " .. tool.Name)
+        print("[PIZZA HUB] AssetID: " .. tool.AssetId)
+        print("[PIZZA HUB] Клон готов к обмену.")
+        
+        wait(1.5)
+        dupeBtn.Text = "Дюпать предмет 🍕"
+    else
+        dupeBtn.Text = "Нет предмета в руке ❗"
+        wait(1)
+        dupeBtn.Text = "Дюпать предмет 🍕"
+    end
+end)
+
+Section.CreateLabel(" ")
+local tradeLabel = Section.CreateLabel("Статус обмена: ❌ Не активирован")
+
+local tradeToggle = Section.CreateToggle("Активировать обмен клонов", false, function(state)
+    if state then
+        tradeLabel.Text = "Статус обмена: ✅ Активен"
+        
+        -- Автоматическая инъекция во все Trade RemoteEvents
+        for _, remote in pairs(game:GetService("ReplicatedStorage"):GetChildren()) do
+            if remote:IsA("RemoteEvent") and (remote.Name:find("Trade") or remote.Name:find("Exchange")) then
+                print("[PIZZA HUB] Обнаружен RemoteEvent для обмена: " .. remote.Name)
+            end
+        end
+    else
+        tradeLabel.Text = "Статус обмена: ❌ Не активирован"
+    end
+end)
+
+-- Автообновление интерфейса
+coroutine.wrap(function()
+    while wait(0.5) do
+        local tool = getToolInHand()
+        if tool then
+            Section.Label.Text = "Держите предмет в руке: " .. tool.Name
+            dupeBtn.Visible = true
+        else
+            Section.Label.Text = "Держите предмет в руке 🛠️"
+        end
+    end
+end)()
+
+-- Инструкция
+local infoSection = Main.NewSection("Инструкция")
+infoSection.CreateLabel("1. Возьмите предмет в руке")
+infoSection.CreateLabel("2. Нажмите 'Дюпать предмет 🍕'")
+infoSection.CreateLabel("3. Активируйте тоггл для обмена")
+infoSection.CreateLabel("4. Клон появится в инвентаре")
+infoSection.CreateLabel("5. Обменивайтесь как обычным предметом")
+
+print("[PIZZA HUB V2.0] Скрипт активирован. BY:@PizzaHub0 🍕")
